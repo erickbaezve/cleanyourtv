@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Banner 16:9 propio (320x180) para la fila de apps de Amazon y para la propia rejilla. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#0F2A3A" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#00A8E1" android:fillAlpha="0.85"
+        android:pathData="M96,54h36a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z" />
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.85"
+        android:pathData="M148,54h36a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z" />
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.5"
+        android:pathData="M200,54h36a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z" />
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.5"
+        android:pathData="M96,98h36a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z" />
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.3"
+        android:pathData="M148,98h36a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z" />
+    <path android:fillColor="#00A8E1" android:fillAlpha="0.5"
+        android:pathData="M200,98h36a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z" />
+</vector>

@@ -1,0 +1,11 @@
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+*.apk
+# Generados por los scripts con datos de tu Fire TV: se quedan en tu PC
+dispositivo/
+bloatware_eliminado.txt
+paquetes_desactivados.txt
+restaurar_bloatware.sh
