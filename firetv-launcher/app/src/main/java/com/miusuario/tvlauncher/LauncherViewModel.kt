@@ -96,4 +96,6 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     fun launch(pkg: String): Boolean = repo.launch(pkg)
 
     suspend fun heroBanner(pkg: String): ImageBitmap? = repo.heroBanner(pkg)
+
+    suspend fun detalles(pkg: String) = repo.detalles(pkg)
 }

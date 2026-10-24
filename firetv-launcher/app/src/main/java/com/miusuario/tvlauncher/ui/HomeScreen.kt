@@ -1,7 +1,7 @@
 package com.miusuario.tvlauncher.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.focusable
@@ -26,7 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -58,6 +58,7 @@ import com.miusuario.tvlauncher.ui.glass.BackdropState
 import com.miusuario.tvlauncher.ui.glass.FpsMonitor
 import com.miusuario.tvlauncher.ui.glass.LocalBackdrop
 import com.miusuario.tvlauncher.ui.glass.LocalCalidad
+import com.miusuario.tvlauncher.ui.glass.LocalAtenuacion
 import com.miusuario.tvlauncher.ui.glass.LocalEspecular
 import com.miusuario.tvlauncher.ui.theme.LauncherTheme
 import com.miusuario.tvlauncher.ui.theme.LocalGlass
@@ -125,6 +126,7 @@ private fun Pantalla(
     val buscarFR = remember { FocusRequester() }
     val ajustesFR = remember { FocusRequester() }
     val carpetaFR = remember { FocusRequester() }
+    val heroFR = remember { FocusRequester() }
     val estadoRejilla = rememberLazyGridState()
 
     var foco by remember { mutableIntStateOf(0) }
@@ -140,6 +142,7 @@ private fun Pantalla(
     var buscando by remember { mutableStateOf(false) }
     var consulta by remember { mutableStateOf("") }
     var rectFoco by remember { mutableStateOf(Rect.Zero) }
+    var info by remember { mutableStateOf<GridEntry?>(null) }
 
     var carpeta by remember { mutableStateOf<String?>(null) }
     var carpetaOrigen by remember { mutableStateOf(Rect.Zero) }
@@ -181,19 +184,17 @@ private fun Pantalla(
         val p = paleta
         val banner = (enfocada as? AppEntry)?.let { apps[it.pkg]?.banner }
         val capa = withContext(Dispatchers.Default) {
-            BackdropState.renderizar(
-                Color(p.fondo), colorFoco, banner, p.intensidadDegradado, tokens.dark, calidad,
-            )
+            BackdropState.renderizar(Color(p.fondo), colorFoco, banner, calidad)
         }
         if (capa != null) backdrop.mostrar(capa) else backdrop.limpiar()
     }
-    val colorFondo by animateColorAsState(colorFoco, spring(stiffness = Spring.StiffnessLow), label = "fondo")
 
     LaunchedEffect(Unit) {
         vm.home.collect {
             menu = null
             renombrar = null
             ajustesAbiertos = false
+            info = null
             carpeta = null
             moviendoEnCarpeta = false
             copia?.let { vm.vista(it) }
@@ -297,10 +298,8 @@ private fun Pantalla(
                     }
                 }
             }
-            // Arriba desde la primera fila: la mitad izquierda va a la búsqueda y la derecha al engranaje.
-            Paso.Arriba -> if (modo == Modo.NORMAL) {
-                if (actual % Config.COLUMNAS < Config.COLUMNAS / 2) buscarFR.requestFocus() else ajustesFR.requestFocus()
-            }
+            // Arriba desde el Dock: a los botones de la tarjeta principal.
+            Paso.Arriba -> if (modo == Modo.NORMAL) heroFR.requestFocus()
             Paso.Borde -> Unit
         }
         return true
@@ -364,39 +363,132 @@ private fun Pantalla(
         rejillaFR.requestFocus()
     }
 
+    // Con el foco por debajo del Dock, la página sube y el fondo se apaga (como al bajar por la rejilla de Apple TV).
+    val desplazado = f >= Config.DOCK && entradas.size > Config.DOCK && carpeta == null
+    val avance = animateFloatAsState(
+        if (desplazado) 1f else 0f,
+        spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow),
+        label = "desplazamiento",
+    )
+
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .onSizeChanged { backdrop.pantalla = it }
-            .drawBehind {
-                if (calidad == CalidadVidrio.BAJA || backdrop.actual == null) {
-                    drawRect(tokens.fondo)
-                    drawRect(
-                        Brush.linearGradient(
-                            listOf(colorFondo.copy(alpha = tokens.intensidadDegradado), colorFondo.copy(alpha = 0f)),
-                            start = Offset.Zero,
-                            end = Offset(size.width, size.height),
-                        ),
-                    )
-                } else {
-                    backdrop.dibujar(this, Offset.Zero, 1f) { it.fondo }
-                }
-            },
+            .onSizeChanged { backdrop.pantalla = it },
     ) {
         // Tamaños: margen ≈ 5%, separación ≈ 2%, 6 iconos 5:3 por fila. En dp, igual en 1080p y 4K.
+        // Todo (barra, información, Dock y rejilla) empieza en el mismo margen izquierdo.
         val margen = maxWidth * Config.MARGEN_LATERAL
         val separacion = maxWidth * Config.SEPARACION
         val anchoIcono = (maxWidth - margen * 2 - separacion * (Config.COLUMNAS - 1)) / Config.COLUMNAS
         val altoIcono = anchoIcono / Config.RELACION
         val altoBarra = 64.dp
-        // Se ve la primera fila completa y asoma la segunda.
-        val altoRejilla = altoIcono * ((Config.ESCALA_FOCO - 1f) / 2f) + 8.dp + altoIcono + ESPACIO_ETIQUETA + altoIcono * 0.42f
-        val altoHero = maxHeight - altoBarra - altoRejilla
+        val altoDock = altoIcono + RELLENO_DOCK * 2
+        val separacionDock = 20.dp
+        val rellenoRejilla = altoIcono * ((Config.ESCALA_FOCO - 1f) / 2f) + 8.dp
+        // Bajo el Dock asoma la siguiente fila.
+        val asoma = separacionDock + rellenoRejilla + altoIcono * 0.32f
+        val altoHero = maxHeight - asoma - altoDock - altoBarra
+        val altoRejilla = maxHeight - altoBarra - altoDock - separacionDock
 
         val vaiven = modo != Modo.NORMAL || moviendoEnCarpeta || okLargo || menu != null
-        val capaEncima = carpeta != null || menu != null || renombrar != null || ajustesAbiertos
+        val capaEncima = carpeta != null || menu != null || renombrar != null || ajustesAbiertos || info != null
+        val levantado = when (modo) {
+            Modo.MOVER -> f
+            Modo.DESTINO -> origen
+            Modo.NORMAL -> null
+        }
+        val mostrarFoco = (focoEnRejilla || menu is Menu.Rejilla) && carpeta == null
 
-        Column(Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalAtenuacion provides avance) {
+            FondoHero(enfocada, apps, avance.value, vm::heroBanner)
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationY = -avance.value * altoHero.toPx() },
+            ) {
+                Box(Modifier.padding(top = altoBarra).fillMaxWidth().height(altoHero)) {
+                    InfoHero(
+                        entry = enfocada,
+                        apps = apps,
+                        abrirFR = heroFR,
+                        arriba = buscarFR,
+                        abajo = rejillaFR,
+                        alAbrir = {
+                            when (val e = entradas.getOrNull(f)) {
+                                is AppEntry -> vm.launch(e.pkg)
+                                is FolderEntry -> abrirCarpeta(e)
+                                null -> Unit
+                            }
+                        },
+                        alInfo = { info = entradas.getOrNull(f) },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = margen, bottom = 26.dp)
+                            .fillMaxWidth(0.5f)
+                            .graphicsLayer { alpha = 1f - avance.value },
+                    )
+                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .focusRequester(rejillaFR)
+                        .onFocusChanged {
+                            focoEnRejilla = it.isFocused
+                            if (it.isFocused) buscando = false
+                        }
+                        .onKeyEvent { teclaRejilla(it) }
+                        .focusable(),
+                ) {
+                    Dock(
+                        entradas = entradas,
+                        apps = apps,
+                        anchoIcono = anchoIcono,
+                        separacion = separacion,
+                        margen = margen,
+                        foco = f,
+                        destino = if (modo == Modo.DESTINO) destino else null,
+                        levantado = levantado,
+                        mostrarFoco = mostrarFoco,
+                        vaiven = vaiven && carpeta == null,
+                        inclinacion = parallax.inclinacion,
+                        etiquetaConFondo = !capaEncima,
+                        alPosicionarFoco = { rectFoco = it },
+                    )
+                    Box(Modifier.padding(top = separacionDock).fillMaxWidth().height(altoRejilla)) {
+                        if (entradas.isEmpty()) {
+                            Text(
+                                if (consulta.isBlank()) "Cargando apps…" else "Ninguna app coincide con \"$consulta\"",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = tokens.textoSecundario,
+                                modifier = Modifier.align(Alignment.TopCenter).padding(top = 20.dp),
+                            )
+                        }
+                        RejillaIconos(
+                            entradas = entradas.drop(Config.DOCK),
+                            apps = apps,
+                            columnas = Config.COLUMNAS,
+                            anchoIcono = anchoIcono,
+                            separacion = separacion,
+                            margen = margen,
+                            foco = f,
+                            destino = if (modo == Modo.DESTINO) destino else null,
+                            levantado = levantado,
+                            mostrarFoco = mostrarFoco,
+                            vaiven = vaiven && carpeta == null,
+                            inclinacion = parallax.inclinacion,
+                            etiquetaConFondo = false,
+                            estado = estadoRejilla,
+                            altoVisible = altoRejilla,
+                            alPosicionarFoco = { rectFoco = it },
+                            inicio = Config.DOCK,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+
             TopBar(
                 margen = margen,
                 buscando = buscando,
@@ -408,60 +500,11 @@ private fun Pantalla(
                 alActivarBusqueda = { buscando = true },
                 buscarFR = buscarFR,
                 ajustesFR = ajustesFR,
-                rejillaFR = rejillaFR,
+                rejillaFR = heroFR,
                 alAjustes = { ajustesAbiertos = true },
                 alPerfil = { vm.repo.openSystemSettings() },
                 pildoraConFondo = true,
             )
-            Hero(
-                entry = enfocada,
-                apps = apps,
-                alto = altoHero,
-                conFondo = !ajustesAbiertos,
-                cargarBanner = vm::heroBanner,
-                modifier = Modifier.padding(horizontal = margen),
-            )
-            Box(Modifier.fillMaxWidth().height(altoRejilla)) {
-                if (entradas.isEmpty()) {
-                    Text(
-                        if (consulta.isBlank()) "Cargando apps…" else "Ninguna app coincide con \"$consulta\"",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = tokens.textoSecundario,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-                RejillaIconos(
-                    entradas = entradas,
-                    apps = apps,
-                    columnas = Config.COLUMNAS,
-                    anchoIcono = anchoIcono,
-                    separacion = separacion,
-                    margen = margen,
-                    foco = f,
-                    destino = if (modo == Modo.DESTINO) destino else null,
-                    levantado = when (modo) {
-                        Modo.MOVER -> f
-                        Modo.DESTINO -> origen
-                        Modo.NORMAL -> null
-                    },
-                    mostrarFoco = (focoEnRejilla || menu is Menu.Rejilla) && carpeta == null,
-                    vaiven = vaiven && carpeta == null,
-                    inclinacion = parallax.inclinacion,
-                    etiquetaConFondo = !capaEncima,
-                    estado = estadoRejilla,
-                    altoVisible = altoRejilla,
-                    alPosicionarFoco = { rectFoco = it },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .focusRequester(rejillaFR)
-                        .onFocusChanged {
-                            focoEnRejilla = it.isFocused
-                            if (it.isFocused) buscando = false
-                        }
-                        .onKeyEvent { teclaRejilla(it) }
-                        .focusable(),
-                )
-            }
         }
 
         // Foco inicial en la rejilla. Va aquí dentro porque BoxWithConstraints compone su contenido durante el layout.
@@ -496,9 +539,24 @@ private fun Pantalla(
                     menu = null
                     rejillaFR.requestFocus()
                 }
+                // Anclar al Dock = pasar a la primera fila (al final); quitar = primera posición fuera del Dock.
+                fun anclar(i: Int): Pair<String, () -> Unit>? = when {
+                    entradas.size <= Config.DOCK -> null
+                    i < Config.DOCK -> "Quitar del Dock" to {
+                        vm.cambiar { it.move(i, Config.DOCK) }
+                        foco = Config.DOCK
+                        cerrar()
+                    }
+                    else -> "Anclar al Dock" to {
+                        vm.cambiar { it.move(i, Config.DOCK - 1) }
+                        foco = Config.DOCK - 1
+                        cerrar()
+                    }
+                }
                 val opciones = when (entry) {
-                    is AppEntry -> listOf(
+                    is AppEntry -> listOfNotNull(
                         "Mover" to { empezarEdicion(Modo.MOVER) },
+                        anclar(m.indice),
                         "Ocultar" to {
                             vm.cambiar { it.hide(entry.pkg) }
                             cerrar()
@@ -506,12 +564,13 @@ private fun Pantalla(
                         "Crear carpeta" to { empezarEdicion(Modo.DESTINO) },
                         "Cancelar" to cerrar,
                     )
-                    is FolderEntry -> listOf(
+                    is FolderEntry -> listOfNotNull(
                         "Abrir" to {
                             menu = null
                             abrirCarpeta(entry)
                         },
                         "Mover" to { empezarEdicion(Modo.MOVER) },
+                        anclar(m.indice),
                         "Renombrar" to {
                             menu = null
                             renombrar = entry.folderId
@@ -592,6 +651,47 @@ private fun Pantalla(
                 },
                 alCancelar = volver,
             )
+        }
+
+        info?.let { e ->
+            val cerrarInfo = {
+                info = null
+                heroFR.requestFocus()
+            }
+            when (e) {
+                is AppEntry -> {
+                    val app = apps[e.pkg]
+                    val det by produceState<com.miusuario.tvlauncher.data.Detalles?>(null, e.pkg) { value = vm.detalles(e.pkg) }
+                    val fecha = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+                    PanelInfo(
+                        titulo = app?.label ?: e.pkg,
+                        lineas = listOfNotNull(
+                            "Tipo" to nombreCategoria(app?.categoria),
+                            det?.version?.takeIf { it.isNotBlank() }?.let { "Versión" to it },
+                            det?.let { "Actualizada" to fecha.format(java.util.Date(it.actualizada)) },
+                            det?.let { "Instalada" to fecha.format(java.util.Date(it.instalada)) },
+                            "Paquete" to e.pkg,
+                        ),
+                        acciones = listOf(
+                            "Abrir" to {
+                                info = null
+                                vm.launch(e.pkg)
+                            },
+                            "Ajustes de la app" to { vm.repo.openAppSettings(e.pkg) },
+                        ),
+                        alCerrar = cerrarInfo,
+                    )
+                }
+                is FolderEntry -> PanelInfo(
+                    titulo = e.name,
+                    lineas = listOf("Apps" to e.apps.joinToString(", ") { apps[it]?.label ?: it }),
+                    acciones = listOf("Abrir carpeta" to {
+                        info = null
+                        abrirCarpeta(e)
+                    }),
+                    alCerrar = cerrarInfo,
+                )
+            }
         }
 
         if (ajustesAbiertos) {

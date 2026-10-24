@@ -247,3 +247,44 @@ private fun Hora(etiqueta: String, hora: Int, alCambiar: (Int) -> Unit) {
         Chip("+") { alCambiar((hora + 1) % 24) }
     }
 }
+
+/**
+ * Panel del botón Información de la tarjeta principal: datos de la app (o las apps de la carpeta) y accesos a abrirla
+ * y a sus ajustes del sistema.
+ */
+@Composable
+fun PanelInfo(
+    titulo: String,
+    lineas: List<Pair<String, String>>,
+    acciones: List<Pair<String, () -> Unit>>,
+    alCerrar: () -> Unit,
+) {
+    val tokens = LocalGlass.current
+    val primero = remember { FocusRequester() }
+    BackHandler(onBack = alCerrar)
+    LaunchedEffect(Unit) { primero.requestFocus() }
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .width(480.dp)
+                .glass(RoundedCornerShape(30.dp), elevacion = 18.dp)
+                .background(tokens.fondo.copy(alpha = VELO_PANEL), RoundedCornerShape(30.dp))
+                .padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(titulo, style = MaterialTheme.typography.titleLarge, color = tokens.texto)
+            lineas.forEach { (etiqueta, valor) ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(etiqueta, style = MaterialTheme.typography.bodyMedium, color = tokens.textoSecundario, modifier = Modifier.width(130.dp))
+                    Text(valor, style = MaterialTheme.typography.bodyMedium, color = tokens.texto)
+                }
+            }
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                acciones.forEachIndexed { i, (texto, accion) ->
+                    Chip(texto, focusRequester = if (i == 0) primero else null, onClick = accion)
+                }
+                Chip("Cerrar", onClick = alCerrar)
+            }
+        }
+    }
+}

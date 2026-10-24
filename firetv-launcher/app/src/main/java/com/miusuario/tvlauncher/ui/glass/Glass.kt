@@ -33,6 +33,9 @@ val LocalCalidad = staticCompositionLocalOf { CalidadVidrio.ALTA }
  */
 val LocalEspecular = staticCompositionLocalOf<State<Float>> { mutableFloatStateOf(0f) }
 
+/** Cuánto está apagado el fondo (0..1, cuando el foco baja a la rejilla): el cristal se apaga igual. */
+val LocalAtenuacion = staticCompositionLocalOf<State<Float>> { mutableFloatStateOf(0f) }
+
 /**
  * Superficie Liquid Glass:
  * 1. Copia desenfocada del fondo recortada a la forma y alineada con la pantalla (escalada 1.05 en calidad alta,
@@ -51,6 +54,7 @@ fun Modifier.glass(
     val calidad = LocalCalidad.current
     val backdrop = LocalBackdrop.current
     val especular = LocalEspecular.current
+    val atenuacion = LocalAtenuacion.current
     var origen by remember { mutableStateOf(Offset.Zero) }
     val usarFondo = conFondo && calidad != CalidadVidrio.BAJA && backdrop.actual != null
     val sombra = if (calidad == CalidadVidrio.ALTA && colorSombra != null) colorSombra else tokens.sombra
@@ -62,6 +66,7 @@ fun Modifier.glass(
         .drawBehind {
             if (usarFondo) {
                 backdrop.dibujar(this, origen, if (calidad == CalidadVidrio.ALTA) 1.05f else 1f) { it.vidrio }
+                if (atenuacion.value > 0f) drawRect(tokens.fondo.copy(alpha = 0.86f * atenuacion.value))
             } else {
                 // Calidad baja: solo translúcido con degradado.
                 drawRect(Brush.verticalGradient(listOf(tokens.tinte, tokens.tinte.copy(alpha = tokens.tinte.alpha * 0.4f))))

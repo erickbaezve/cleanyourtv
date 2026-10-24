@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.LruCache
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
@@ -20,6 +21,8 @@ import com.miusuario.tvlauncher.model.Categoria
 import com.miusuario.tvlauncher.model.LayoutState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+data class Detalles(val version: String, val instalada: Long, val actualizada: Long)
 
 @Immutable
 data class AppInfo(
@@ -76,13 +79,16 @@ class AppRepository(private val context: Context) {
         )
     }
 
-    /** Banner grande solo para la app enfocada en la tarjeta principal (se guardan 3 en caché). */
+    /**
+     * Banner grande solo para la app enfocada, que ocupa todo el fondo (se guardan 3 en caché, ~2 MB cada uno).
+     * Si la app trae un banner de alta resolución se conserva el detalle; si es pequeño, se escala con filtro.
+     */
     suspend fun heroBanner(pkg: String): ImageBitmap? = withContext(Dispatchers.Default) {
         heroCache.get(pkg) ?: runCatching {
             val ai = pm.getApplicationInfo(pkg, 0)
             val launch = pm.getLeanbackLaunchIntentForPackage(pkg)
             val activityBanner = launch?.component?.let { pm.getActivityInfo(it, 0).loadBanner(pm) }
-            (activityBanner ?: ai.loadBanner(pm))?.let { render(it, 640, 360).asImageBitmap() }
+            (activityBanner ?: ai.loadBanner(pm))?.let { render(it, 960, 540).asImageBitmap() }
         }.getOrNull()?.also { heroCache.put(pkg, it) }
     }
 
@@ -114,12 +120,39 @@ class AppRepository(private val context: Context) {
         }
     }
 
-    private fun categoria(ai: ApplicationInfo): Categoria = when (ai.category) {
-        ApplicationInfo.CATEGORY_GAME -> Categoria.JUEGOS
-        ApplicationInfo.CATEGORY_AUDIO -> Categoria.MUSICA
-        ApplicationInfo.CATEGORY_VIDEO, ApplicationInfo.CATEGORY_IMAGE -> Categoria.STREAMING
-        ApplicationInfo.CATEGORY_PRODUCTIVITY -> Categoria.UTILIDADES
-        else -> LayoutState.categoriaPorPaquete(ai.packageName)
+    /** Detalles para el panel de Información. */
+    suspend fun detalles(pkg: String): Detalles? = withContext(Dispatchers.Default) {
+        runCatching {
+            val pi = pm.getPackageInfo(pkg, 0)
+            Detalles(pi.versionName ?: "", pi.firstInstallTime, pi.lastUpdateTime)
+        }.getOrNull()
+    }
+
+    /** Pantalla de la app en los ajustes del sistema (forzar detención, borrar caché, desinstalar...). */
+    fun openAppSettings(pkg: String) {
+        try {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$pkg"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        } catch (e: ActivityNotFoundException) {
+            openSystemSettings()
+        } catch (e: SecurityException) {
+            openSystemSettings()
+        }
+    }
+
+    // `android:appCategory` existe desde Android 8 (API 26); en Fire OS 6 (Android 7.1) se deduce del paquete.
+    private fun categoria(ai: ApplicationInfo): Categoria {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            when (ai.category) {
+                ApplicationInfo.CATEGORY_GAME -> return Categoria.JUEGOS
+                ApplicationInfo.CATEGORY_AUDIO -> return Categoria.MUSICA
+                ApplicationInfo.CATEGORY_VIDEO, ApplicationInfo.CATEGORY_IMAGE -> return Categoria.STREAMING
+                ApplicationInfo.CATEGORY_PRODUCTIVITY -> return Categoria.UTILIDADES
+            }
+        }
+        return LayoutState.categoriaPorPaquete(ai.packageName)
     }
 
     private fun render(d: Drawable, w: Int, h: Int): Bitmap {

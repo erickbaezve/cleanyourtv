@@ -165,7 +165,16 @@ class CapturasTest {
         esperar(3000)
         guardar("09_claro_calidad_baja")
 
-        tecla(Key.DirectionUp) // desde Kodi (columna 4): al engranaje
+        tecla(Key.DirectionUp) // del Dock a los botones de la tarjeta principal
+        guardar("11_claro_botones_hero")
+        tecla(Key.DirectionRight) // Información
+        tecla(Key.DirectionCenter)
+        esperar(1500)
+        rule.onNodeWithText("Ajustes de la app").assertExists()
+        guardar("12_informacion")
+        atras()
+        tecla(Key.DirectionUp) // a la búsqueda
+        tecla(Key.DirectionRight) // al engranaje
         tecla(Key.DirectionCenter)
         esperar(1500)
         rule.onNodeWithText("Calidad del vidrio").assertExists()
@@ -184,12 +193,17 @@ class CapturasTest {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         p.shader = LinearGradient(0f, 0f, 320f, 180f, color, oscurecer(color), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, 320f, 180f, p)
+        // Formas suaves para que el arte de fondo parezca una ilustración.
+        p.shader = android.graphics.RadialGradient(250f, 40f, 140f, 0x55FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
+        c.drawCircle(250f, 40f, 140f, p)
+        p.shader = android.graphics.RadialGradient(60f, 170f, 110f, 0x66000000, 0x00000000, Shader.TileMode.CLAMP)
+        c.drawCircle(60f, 170f, 110f, p)
         p.shader = null
         p.color = android.graphics.Color.WHITE
         p.textSize = 40f
         p.typeface = Typeface.DEFAULT_BOLD
         p.textAlign = Paint.Align.CENTER
-        c.drawText(nombre, 160f, 104f, p)
+        c.drawText(nombre, 200f, 104f, p)
         return b
     }
 

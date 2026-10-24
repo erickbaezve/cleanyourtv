@@ -5,7 +5,7 @@
 # - Conecta por ADB (puede que tengas que aceptar el aviso en la TV).
 # - Muestra modelo, versión de Android (SDK) y de Fire OS.
 # - Se detiene si ADB no responde o el dispositivo no es Android (Fire TV Stick 4K Select usa Vega OS).
-# - Se detiene si el SDK es menor que 28 (el minSdk del launcher).
+# - Se detiene si el SDK es menor que 25 (el minSdk del launcher: Fire OS 6 / Android 7.1).
 # - Lista los paquetes de launcher. No cambia nada en la TV.
 # Guarda el resultado en dispositivo/info.txt (ignorado por git: no lo subas).
 set -euo pipefail
@@ -49,11 +49,12 @@ mkdir -p dispositivo
 } | tee dispositivo/info.txt
 
 case "$SDK" in
+  25) echo "Fire OS 6 (Android 7.1)." ;;
   28) echo "Fire OS 7 (Android 9)." ;;
   30) echo "Fire OS 8 (Android 11)." ;;
 esac
-if [ "$SDK" -lt 28 ]; then
-  echo "DETENTE: SDK $SDK es menor que 28, el mínimo del launcher (Fire OS 7). No bajes minSdk."
+if [ "$SDK" -lt 25 ]; then
+  echo "DETENTE: SDK $SDK es menor que 25, el mínimo del launcher (Fire OS 6)."
   exit 1
 fi
 echo

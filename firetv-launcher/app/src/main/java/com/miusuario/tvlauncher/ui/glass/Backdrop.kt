@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
@@ -29,7 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.miusuario.tvlauncher.CalidadVidrio
 
-/** Fondo de pantalla ya desenfocado y su copia más desenfocada para el interior del cristal. */
+/** Copia pequeña del fondo y su versión desenfocada, que es la que se ve dentro del cristal. */
 class Capa(val fondo: ImageBitmap, val vidrio: ImageBitmap)
 
 /**
@@ -98,45 +97,56 @@ class BackdropState {
         private const val ALTO = 108
 
         /**
-         * Renderiza el fondo (llamar fuera del hilo principal). Devuelve null en calidad baja: entonces el fondo es
-         * un degradado dibujado directamente y el cristal solo es translúcido.
+         * Renderiza una copia pequeña del fondo de la tarjeta principal (llamar fuera del hilo principal): el arte de
+         * la app a pantalla completa con los mismos velos que [com.miusuario.tvlauncher.ui.FondoHero], desenfocada.
+         * Devuelve null en calidad baja: entonces el cristal solo es translúcido.
          */
         fun renderizar(
             base: Color,
             colorApp: Color,
             banner: ImageBitmap?,
-            intensidad: Float,
-            dark: Boolean,
             calidad: CalidadVidrio,
         ): Capa? {
             if (calidad == CalidadVidrio.BAJA) return null
             val bmp = Bitmap.createBitmap(ANCHO, ALTO, Bitmap.Config.ARGB_8888)
             val c = Canvas(bmp)
-            c.drawColor(base.toArgb())
+            val w = ANCHO.toFloat()
+            val h = ALTO.toFloat()
             val app = colorApp.toArgb()
             val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-            // Degradado vivo: el color de la app desde arriba a la izquierda hacia el fondo.
-            paint.shader = LinearGradient(
-                0f, 0f, ANCHO.toFloat(), ALTO.toFloat(),
-                conAlfa(app, intensidad), conAlfa(app, 0f), Shader.TileMode.CLAMP,
-            )
-            c.drawRect(0f, 0f, ANCHO.toFloat(), ALTO.toFloat(), paint)
-            paint.shader = RadialGradient(
-                ANCHO * 0.8f, ALTO * 0.15f, ANCHO * 0.55f,
-                conAlfa(app, intensidad * 0.9f), conAlfa(app, 0f), Shader.TileMode.CLAMP,
-            )
-            c.drawRect(0f, 0f, ANCHO.toFloat(), ALTO.toFloat(), paint)
+            paint.shader = LinearGradient(0f, 0f, w, h, app, oscurecer(app), Shader.TileMode.CLAMP)
+            c.drawRect(0f, 0f, w, h, paint)
             paint.shader = null
-            // El arte de la app, grande y tenue, para que el cristal tenga algo que "refractar".
             if (banner != null) {
+                // Recorte centrado a 16:9, como ContentScale.Crop.
                 val b = banner.asAndroidBitmap()
-                paint.alpha = if (dark) 70 else 55
-                c.drawBitmap(b, Rect(0, 0, b.width, b.height), RectF(ANCHO * 0.35f, -ALTO * 0.1f, ANCHO * 1.1f, ALTO * 0.75f), paint)
+                val escala = maxOf(w / b.width, h / b.height)
+                val dw = b.width * escala
+                val dh = b.height * escala
+                c.drawBitmap(b, Rect(0, 0, b.width, b.height), RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2), paint)
             }
-            val fondo = StackBlur.blur(bmp, 4)
-            val vidrio = StackBlur.blur(fondo, 10)
-            bmp.recycle()
-            return Capa(fondo.asImageBitmap(), vidrio.asImageBitmap())
+            val fondo = base.toArgb()
+            paint.shader = LinearGradient(
+                0f, 0f, w, 0f,
+                intArrayOf(conAlfa(fondo, 0.92f), conAlfa(fondo, 0.55f), conAlfa(fondo, 0f)),
+                floatArrayOf(0f, 0.42f, 0.75f), Shader.TileMode.CLAMP,
+            )
+            c.drawRect(0f, 0f, w, h, paint)
+            paint.shader = LinearGradient(
+                0f, 0f, 0f, h,
+                intArrayOf(conAlfa(fondo, 0.55f), conAlfa(fondo, 0f), conAlfa(fondo, 0f), conAlfa(fondo, 0.85f), conAlfa(fondo, 1f)),
+                floatArrayOf(0f, 0.18f, 0.52f, 0.82f, 1f), Shader.TileMode.CLAMP,
+            )
+            c.drawRect(0f, 0f, w, h, paint)
+            val vidrio = StackBlur.blur(bmp, 8)
+            return Capa(bmp.asImageBitmap(), vidrio.asImageBitmap())
+        }
+
+        private fun oscurecer(argb: Int): Int {
+            val r = ((argb shr 16) and 0xFF) * 4 / 10
+            val g = ((argb shr 8) and 0xFF) * 4 / 10
+            val b = (argb and 0xFF) * 4 / 10
+            return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
 
         private fun conAlfa(argb: Int, a: Float): Int =

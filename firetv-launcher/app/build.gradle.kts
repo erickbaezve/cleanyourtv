@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.miusuario.tvlauncher"
-        minSdk = 28
+        minSdk = 25 // Fire OS 6 (Android 7.1), como el Fire TV Stick 4K de 1.ª generación
         targetSdk = 33
         versionCode = 1
         versionName = "1.0"

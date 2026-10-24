@@ -8,6 +8,9 @@ object Config {
     /** Iconos por fila, como en Apple TV. */
     const val COLUMNAS = 6
 
+    /** Apps ancladas en el Dock: la primera fila, como en Apple TV. */
+    const val DOCK = COLUMNAS
+
     /** Proporción ancho/alto del icono (400x240 de tvOS). */
     const val RELACION = 5f / 3f
 
